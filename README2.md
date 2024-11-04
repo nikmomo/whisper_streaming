@@ -72,7 +72,7 @@ pip install cryptography (for https)
 
 # Usage
 
-**run server for transcription**  
+**run server for transcription**   
 `python whisper_server.py --backend faster-whisper --language pl --min-chunk-size 1 --silence-size 2 --model medium`  
 --silence-size (Silence segment size in seconds, default value 2)  
 --silence-threshold (default value 0.01)  
