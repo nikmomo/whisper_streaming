@@ -99,6 +99,7 @@ async def audio_stream(websocket, path):
         online.finish()
         logger.info("Connection closed")
 
+# async def main():
 parser = argparse.ArgumentParser()
 parser.add_argument('--silence-size', type=float, default=2.0, help='Silence segment size in seconds')
 parser.add_argument('--silence-threshold', type=float, default=0.01, help='Silence threshold')
@@ -120,7 +121,7 @@ package1_log = logging.getLogger('whisper_online')
 package1_log.setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-warm_up()
+# warm_up()
 logger.info("Server started")
 start_server = websockets.serve(audio_stream, 'localhost', 43007)
 

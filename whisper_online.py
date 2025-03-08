@@ -77,17 +77,17 @@ class WhisperTimestampedASR(ASRBase):
                 condition_on_previous_text=True, **self.transcribe_kargs)
         return result
  
-    def ts_words(self,r):
-        # return: transcribe result object to [(beg,end,"word1"), ...]
+    def ts_words(self, r):
+        # 将转译结果转换为 [(beg, end, "word"), ...] 格式
         o = []
-        for s in r["segments"]:
-            for w in s["words"]:
-                t = (w["start"],w["end"],w["text"])
+        for s in r.segments:  # 使用属性访问
+            for w in s.words:
+                t = (w.start, w.end, w.word)  # 用属性获取 start, end, word
                 o.append(t)
         return o
 
     def segments_end_ts(self, res):
-        return [s["end"] for s in res["segments"]]
+        return [s.end for s in res.segments]  # 使用属性访问
 
     def use_vad(self):
         self.transcribe_kargs["vad"] = True
@@ -186,22 +186,22 @@ class OpenaiApiASR(ASRBase):
         if self.use_vad_opt:
             for segment in segments.segments:
                 # TODO: threshold can be set from outside
-                if segment["no_speech_prob"] > 0.8:
-                    no_speech_segments.append((segment.get("start"), segment.get("end")))
+                if segment.no_speech_prob > 0.8:
+                    no_speech_segments.append((segment.start, segment.end))
 
         o = []
         for word in segments.words:
-            start = word.get("start")
-            end = word.get("end")
+            start = word.start
+            end = word.end
             if any(s[0] <= start <= s[1] for s in no_speech_segments):
                 # print("Skipping word", word.get("word"), "because it's in a no-speech segment")
                 continue
-            o.append((start, end, word.get("word")))
+            o.append((start, end, word.word))
         return o
 
 
     def segments_end_ts(self, res):
-        return [s["end"] for s in res.words]
+        return [s.end for s in res.words]
 
     def transcribe(self, audio_data, prompt=None, *args, **kwargs):
         # Write the audio data to a buffer
@@ -362,18 +362,27 @@ class OnlineASRProcessor:
 
     def process_iter(self):
         """Runs on the current audio buffer.
-        Returns: a tuple (beg_timestamp, end_timestamp, "text"), or (None, None, ""). 
+        Returns: a tuple (beg_timestamp, end_timestamp, "text"), or (None, None, "").
         The non-emty text is confirmed (committed) partial transcript.
         """
-
         prompt, non_prompt = self.prompt()
         logger.debug(f"PROMPT: {prompt}")
         logger.debug(f"CONTEXT: {non_prompt}")
         logger.debug(f"transcribing {len(self.audio_buffer)/self.SAMPLING_RATE:2.2f} seconds from {self.buffer_time_offset:2.2f}")
+
+        # 调用 API 进行转译
         res = self.asr.transcribe(self.audio_buffer, init_prompt=prompt)
 
-        # transform to [(beg,end,"word1"), ...]
+        # 打印完整的 API response
+        print("API response:")
+        print(res)
+
+        # 将转译结果转换为 [(beg, end, "word"), ...] 格式
         tsw = self.asr.ts_words(res)
+
+        # 打印由 ts_words 处理后的内容
+        print("ts_words output:")
+        print(tsw)
 
         self.transcript_buffer.insert(tsw, self.buffer_time_offset)
         o = self.transcript_buffer.flush()
@@ -383,31 +392,19 @@ class OnlineASRProcessor:
         the_rest = self.to_flush(self.transcript_buffer.complete())
         logger.debug(f"INCOMPLETE: {the_rest}")
 
-        # there is a newly confirmed text
-
-        if o and self.buffer_trimming_way == "sentence":  # trim the completed sentences
-            if len(self.audio_buffer)/self.SAMPLING_RATE > self.buffer_trimming_sec:  # longer than this
+        # 根据 buffer trimming 策略进行处理（略）
+        if o and self.buffer_trimming_way == "sentence":
+            if len(self.audio_buffer)/self.SAMPLING_RATE > self.buffer_trimming_sec:
                 self.chunk_completed_sentence()
 
-        
         if self.buffer_trimming_way == "segment":
-            s = self.buffer_trimming_sec  # trim the completed segments longer than s,
+            s = self.buffer_trimming_sec
         else:
-            s = 30 # if the audio buffer is longer than 30s, trim it
-        
+            s = 30
         if len(self.audio_buffer)/self.SAMPLING_RATE > s:
             self.chunk_completed_segment(res)
-
-            # alternative: on any word
-            #l = self.buffer_time_offset + len(self.audio_buffer)/self.SAMPLING_RATE - 10
-            # let's find commited word that is less
-            #k = len(self.commited)-1
-            #while k>0 and self.commited[k][1] > l:
-            #    k -= 1
-            #t = self.commited[k][1] 
             logger.debug("chunking segment")
-            #self.chunk_at(t)
-
+        
         logger.debug(f"len of buffer now: {len(self.audio_buffer)/self.SAMPLING_RATE:2.2f}")
         return self.to_flush(o)
 
